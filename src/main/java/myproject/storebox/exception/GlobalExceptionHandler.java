@@ -35,6 +35,15 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(errors, HttpStatus.BAD_REQUEST);
     }
 
+/* <<<<<<<<<<<<<<  ✨ Windsurf Command ⭐ >>>>>>>>>>>>>>>> */
+    /**
+     * Catch-all exception handler. Any uncaught exceptions will be caught by this
+     * method and will return a 500 status code with a generic error message.
+     *
+     * @param ex the exception to handle
+     * @return a generic error response
+     */
+/* <<<<<<<<<<  9692af37-c8fd-4210-8ffc-cf78305ea587  >>>>>>>>>>> */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleGlobalException(Exception ex) {
         Map<String, String> response = new HashMap<>();
