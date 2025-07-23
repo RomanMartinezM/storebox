@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/storebox
+    username: postgres
+    password: 16161364
+    initialization-mode: always
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: none
+  sql:
+    init:
+      mode: never
+      platform: postgresql
+      schema-locations: classpath:schema-postgresql.sql
+websiteUrl: http://localhost:4242
