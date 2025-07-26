@@ -1,8 +1,10 @@
 spring:
+  config:
+    import: "optional:classpath:.env[.properties]"
   datasource:
-    url: jdbc:postgresql://localhost:5432/storebox
-    username: postgres
-    password: 16161364
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     initialization-mode: always
   jpa:
     show-sql: true
@@ -13,4 +15,5 @@ spring:
       mode: never
       platform: postgresql
       schema-locations: classpath:schema-postgresql.sql
-websiteUrl: http://localhost:4242
+
+websiteUrl: ${WEBSITE_URL}
