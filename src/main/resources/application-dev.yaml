@@ -12,7 +12,7 @@ spring:
       ddl-auto: none
   sql:
     init:
-      mode: never
+      mode: never #always
       platform: postgresql
       schema-locations: classpath:schema-postgresql.sql
 

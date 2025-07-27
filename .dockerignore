@@ -1,0 +1,23 @@
+# Maven
+target/
+!.mvn/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Logs
+logs/
+*.log
+
+# Environment files
+.env
+
+# Git
+.git/
+.gitignore
+
+# OS specific files
+.DS_Store
+Thumbs.db
