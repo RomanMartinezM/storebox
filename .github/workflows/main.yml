@@ -27,10 +27,10 @@ jobs:
     - name: Build with Maven
       run: mvn -B clean package -DskipTests
     
-    - name: Install OpenShift CLI
+    - name: Install OpenShift tools
       uses: redhat-actions/openshift-tools-installer@v1
       with:
-        openshift-cli: 'latest'
+        oc: 'latest'  # or specify a version like '4.12'
     
     - name: Login to OpenShift
       run: |
