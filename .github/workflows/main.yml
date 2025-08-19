@@ -26,20 +26,12 @@ jobs:
     
     - name: Build with Maven
       run: mvn -B clean package -DskipTests
-    
-    - name: Install OpenShift tools
+      
+    - name: Install OpenShift CLI
       uses: redhat-actions/openshift-tools-installer@v1
       with:
-        oc: '4.19.9'
-        oc_archive: 'openshift-client-linux-4.19.9.tar.gz'  # or the specific archive you need
-  
-    - name: Cache OpenShift tools
-      uses: actions/cache@v3
-      with:
-        path: ~/.local/oc
-        key: ${{ runner.os }}-oc-4.19.9-${{ hashFiles('pom.xml') }}  # For Maven
-        # or
-        # key: ${{ runner.os }}-oc-4.19.9-${{ hashFiles('build.gradle') }}  # For Gradle
+        oc: '4.19.9'  # Specify the exact version
+        skip_cache: true  # Skip caching to avoid conflicts
       
     - name: Login to OpenShift
       run: |
