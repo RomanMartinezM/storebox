@@ -30,8 +30,17 @@ jobs:
     - name: Install OpenShift tools
       uses: redhat-actions/openshift-tools-installer@v1
       with:
-        oc: 'latest'  # or specify a version like '4.12'
-    
+        oc: '4.19.9'
+        oc_archive: 'openshift-client-linux-4.19.9.tar.gz'  # or the specific archive you need
+  
+    - name: Cache OpenShift tools
+      uses: actions/cache@v3
+      with:
+        path: ~/.local/oc
+        key: ${{ runner.os }}-oc-4.19.9-${{ hashFiles('pom.xml') }}  # For Maven
+        # or
+        # key: ${{ runner.os }}-oc-4.19.9-${{ hashFiles('build.gradle') }}  # For Gradle
+      
     - name: Login to OpenShift
       run: |
         oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }}
