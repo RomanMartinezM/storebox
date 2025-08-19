@@ -8,9 +8,9 @@ on:
 env:
   OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER }}
   NAMESPACE: ${{ secrets.NAMESPACE }}
-  APP_NAME: ${{ vars.APP_NAME || 'storebox' }}
-  PORT: ${{ vars.PORT || '8080' }}
-  SPRING_PROFILES_ACTIVE: ${{ vars.SPRING_PROFILES_ACTIVE || 'prod' }}
+  APP_NAME: storebox
+  PORT: 8080
+  SPRING_PROFILES_ACTIVE: prod
 
 jobs:
   deploy:
@@ -19,20 +19,22 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
+    - name: Debug - List files
+      run: ls -la
+      
     - name: Set up JDK 17
       uses: actions/setup-java@v3
       with:
         java-version: '17'
         distribution: 'temurin'
     
-    - name: Build with Maven and Docker
+    - name: Build with Maven
       run: |
-        # Build the JAR
         mvn -B clean package -DskipTests
-        
-        # Build Docker image locally (for verification)
-        docker build -t ${{ env.APP_NAME }} .
-        docker images | grep ${{ env.APP_NAME }}
+        ls -la target/
+      
+    - name: Show Dockerfile
+      run: cat Dockerfile
       
     - name: Install OpenShift CLI
       uses: redhat-actions/openshift-tools-installer@v1
@@ -42,59 +44,35 @@ jobs:
       
     - name: Login to OpenShift
       run: |
+        oc version
         oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }} --insecure-skip-tls-verify=true
-        oc project ${{ secrets.NAMESPACE }} || oc new-project ${{ secrets.NAMESPACE }}
+        oc whoami
+        oc projects
+        oc project ${{ env.NAMESPACE }} || oc new-project ${{ env.NAMESPACE }}
     
     - name: Deploy Application
       run: |
-        # Set environment variables
-        ENV_VARS=(
-          "SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILES_ACTIVE }}"
-          "SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}"
-          "SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}"
-          "SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}"
-        )
+        echo "Deploying ${{ env.APP_NAME }} to ${{ env.NAMESPACE }}"
         
-        # Join environment variables with commas
-        ENV_STRING=$(IFS=,; echo "${ENV_VARS[*]}")
-        
+        # Create or update the app
         if ! oc get deployment ${{ env.APP_NAME }} &> /dev/null; then
-          echo "Creating new application with Docker strategy..."
-          
-          # Create new app using Docker strategy
+          echo "Creating new application..."
           oc new-app . --name=${{ env.APP_NAME }} \
             --strategy=docker \
-            -e $ENV_STRING
-          
-          # Expose the service
+            -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILES_ACTIVE }} \
+            -e SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
+            -e SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
+            -e SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+            
           oc expose svc/${{ env.APP_NAME }} || echo "Service already exposed"
         else
-          echo "Starting new build..."
+          echo "Updating existing application..."
           oc start-build ${{ env.APP_NAME }} --from-dir=. --follow
         fi
         
-        # Configure health checks
-        oc set probe deployment/${{ env.APP_NAME }} \
-          --liveness \
-          --get-url=http://:${{ env.PORT }}/actuator/health \
-          --initial-delay-seconds=120 \
-          --timeout-seconds=5 || echo "Failed to set liveness probe"
-          
-        oc set probe deployment/${{ env.APP_NAME }} \
-          --readiness \
-          --get-url=http://:${{ env.PORT }}/actuator/health \
-          --initial-delay-seconds=30 \
-          --timeout-seconds=5 || echo "Failed to set readiness probe"
-        
-        # Wait for deployment to complete
-        oc rollout status deployment/${{ env.APP_NAME }} --timeout=300s || echo "Deployment failed or timed out"
-        
-        # Debug information
-        echo "=== Deployment Status ==="
+        # Get deployment status
         oc get pods
-        echo -e "\n=== Build Logs ==="
         oc logs -f deployment/${{ env.APP_NAME }} --tail=50 || echo "Could not get logs"
         
-        # Get the route URL
-        echo -e "\n=== Application URL ==="
-        oc get route ${{ env.APP_NAME }} -o jsonpath='{.spec.host}' || echo "Could not get route"
+        # Show route
+        oc get route ${{ env.APP_NAME }} || echo "Could not get route"
