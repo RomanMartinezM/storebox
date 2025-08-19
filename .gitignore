@@ -34,5 +34,6 @@ build/
 .env
 .env-dev
 .env-prod
+.env-dev-2
 
 src/main/resources/.env
