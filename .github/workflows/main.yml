@@ -8,9 +8,10 @@ on:
 env:
   OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER }}
   NAMESPACE: ${{ secrets.NAMESPACE }}
-  APP_NAME: storebox
-  PORT: 8080
-  SPRING_PROFILES_ACTIVE: prod
+  APP_NAME: ${{ vars.APP_NAME }}
+  PORT: ${{ vars.PORT }}
+  SPRING_PROFILES_ACTIVE: ${{ vars.SPRING_PROFILES_ACTIVE }} 
+  
 
 jobs:
   deploy:
@@ -19,9 +20,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    - name: Debug - List files
-      run: ls -la
-      
     - name: Set up JDK 17
       uses: actions/setup-java@v3
       with:
@@ -29,50 +27,55 @@ jobs:
         distribution: 'temurin'
     
     - name: Build with Maven
-      run: |
-        mvn -B clean package -DskipTests
-        ls -la target/
-      
-    - name: Show Dockerfile
-      run: cat Dockerfile
+      run: mvn -B clean package -DskipTests
       
     - name: Install OpenShift CLI
       uses: redhat-actions/openshift-tools-installer@v1
       with:
-        oc: '4.12.0'
-        skip_cache: true
+        oc: '4.12.0'  # Using a more stable version
+        skip_cache: true  # Skip caching to avoid conflicts
       
     - name: Login to OpenShift
       run: |
-        oc version
-        oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }} --insecure-skip-tls-verify=true
-        oc whoami
-        oc projects
-        oc project ${{ env.NAMESPACE }} || oc new-project ${{ env.NAMESPACE }}
+        oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }}
+        oc project ${{ secrets.NAMESPACE }}
     
     - name: Deploy Application
       run: |
-        echo "Deploying ${{ env.APP_NAME }} to ${{ env.NAMESPACE }}"
-        
-        # Create or update the app
+        # Create a new app or update existing one
         if ! oc get deployment ${{ env.APP_NAME }} &> /dev/null; then
-          echo "Creating new application..."
+          # Create new app if it doesn't exist
           oc new-app . --name=${{ env.APP_NAME }} \
             --strategy=docker \
             -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILES_ACTIVE }} \
             -e SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
             -e SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
             -e SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
-            
-          oc expose svc/${{ env.APP_NAME }} || echo "Service already exposed"
+          
+          # Expose the service
+          oc expose svc/${{ env.APP_NAME }}
         else
           echo "Updating existing application..."
+          # Start a new build for existing app
           oc start-build ${{ env.APP_NAME }} --from-dir=. --follow
         fi
         
-        # Get deployment status
-        oc get pods
-        oc logs -f deployment/${{ env.APP_NAME }} --tail=50 || echo "Could not get logs"
+        # Configure health checks
+        oc set probe deployment/${{ env.APP_NAME }} \
+          --liveness \
+          --get-url=http://:${{ env.PORT }}/actuator/health \
+          --initial-delay-seconds=60 \
+          --timeout-seconds=5
+          
+        oc set probe deployment/${{ env.APP_NAME }} \
+          --readiness \
+          --get-url=http://:${{ env.PORT }}/actuator/health \
+          --initial-delay-seconds=30 \
+          --timeout-seconds=5
         
-        # Show route
-        oc get route ${{ env.APP_NAME }} || echo "Could not get route"
+        # Wait for deployment to complete
+        oc rollout status deployment/${{ env.APP_NAME }}
+
+        # Get detailed pod status if deployment fails
+        oc get pods
+        oc describe deployment/${{ env.APP_NAME }}
