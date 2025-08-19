@@ -1,5 +1,4 @@
 name: Debug OpenShift Deployment
-
 on:
   workflow_dispatch:
 
