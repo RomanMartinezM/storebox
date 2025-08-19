@@ -25,10 +25,14 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
     
-    - name: Build with Maven
+    - name: Build with Maven and Docker
       run: |
+        # Build the JAR
         mvn -B clean package -DskipTests
-        ls -la target/  # Debug: Check the built JAR file
+        
+        # Build Docker image locally (for verification)
+        docker build -t ${{ env.APP_NAME }} .
+        docker images | grep ${{ env.APP_NAME }}
       
     - name: Install OpenShift CLI
       uses: redhat-actions/openshift-tools-installer@v1
@@ -43,42 +47,30 @@ jobs:
     
     - name: Deploy Application
       run: |
-        # Create a new app or update existing one
+        # Set environment variables
+        ENV_VARS=(
+          "SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILES_ACTIVE }}"
+          "SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}"
+          "SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}"
+          "SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}"
+        )
+        
+        # Join environment variables with commas
+        ENV_STRING=$(IFS=,; echo "${ENV_VARS[*]}")
+        
         if ! oc get deployment ${{ env.APP_NAME }} &> /dev/null; then
-          echo "Creating new application..."
+          echo "Creating new application with Docker strategy..."
           
-          # Check if we have a Dockerfile
-          if [ -f "Dockerfile" ]; then
-            echo "Using existing Dockerfile..."
-            oc new-app . --name=${{ env.APP_NAME }} \
-              --strategy=docker \
-              -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILES_ACTIVE }} \
-              -e SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
-              -e SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
-              -e SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
-          else
-            echo "No Dockerfile found, using Source-to-Image (S2I) with Java..."
-            oc new-app --name=${{ env.APP_NAME }} \
-              --image-stream=openjdk-17 \
-              --binary \
-              -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILES_ACTIVE }} \
-              -e SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
-              -e SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
-              -e SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
-            
-            # Start the build with the JAR file
-            oc start-build ${{ env.APP_NAME }} --from-file=target/*.jar --follow
-          fi
+          # Create new app using Docker strategy
+          oc new-app . --name=${{ env.APP_NAME }} \
+            --strategy=docker \
+            -e $ENV_STRING
           
           # Expose the service
           oc expose svc/${{ env.APP_NAME }} || echo "Service already exposed"
         else
-          echo "Updating existing application..."
-          if [ -f "Dockerfile" ]; then
-            oc start-build ${{ env.APP_NAME }} --from-dir=. --follow
-          else
-            oc start-build ${{ env.APP_NAME }} --from-file=target/*.jar --follow
-          fi
+          echo "Starting new build..."
+          oc start-build ${{ env.APP_NAME }} --from-dir=. --follow
         fi
         
         # Configure health checks
@@ -98,9 +90,11 @@ jobs:
         oc rollout status deployment/${{ env.APP_NAME }} --timeout=300s || echo "Deployment failed or timed out"
         
         # Debug information
-        echo "Current pods:"
+        echo "=== Deployment Status ==="
         oc get pods
-        echo "Deployment status:"
-        oc describe deployment/${{ env.APP_NAME }}
-        echo "Build logs:"
+        echo -e "\n=== Build Logs ==="
         oc logs -f deployment/${{ env.APP_NAME }} --tail=50 || echo "Could not get logs"
+        
+        # Get the route URL
+        echo -e "\n=== Application URL ==="
+        oc get route ${{ env.APP_NAME }} -o jsonpath='{.spec.host}' || echo "Could not get route"
