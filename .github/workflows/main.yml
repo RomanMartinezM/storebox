@@ -10,6 +10,8 @@ env:
   NAMESPACE: ${{ secrets.NAMESPACE }}
   APP_NAME: ${{ vars.APP_NAME }}
   PORT: ${{ vars.PORT }}
+  SPRING_PROFILES_ACTIVE: ${{ vars.SPRING_PROFILES_ACTIVE }} 
+  
 
 jobs:
   deploy:
@@ -30,7 +32,7 @@ jobs:
     - name: Install OpenShift CLI
       uses: redhat-actions/openshift-tools-installer@v1
       with:
-        oc: '4.19.9'  # Specify the exact version
+        oc: '4.12.0'  # Using a more stable version
         skip_cache: true  # Skip caching to avoid conflicts
       
     - name: Login to OpenShift
@@ -53,6 +55,7 @@ jobs:
           # Expose the service
           oc expose svc/${{ env.APP_NAME }}
         else
+          echo "Updating existing application..."
           # Start a new build for existing app
           oc start-build ${{ env.APP_NAME }} --from-dir=. --follow
         fi
