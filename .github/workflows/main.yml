@@ -76,3 +76,6 @@ jobs:
         # Wait for deployment to complete
         oc rollout status deployment/${{ env.APP_NAME }}
 
+        # Get detailed pod status if deployment fails
+        oc get pods
+        oc describe deployment/${{ env.APP_NAME }}
