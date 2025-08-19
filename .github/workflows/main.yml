@@ -8,8 +8,8 @@ on:
 env:
   OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER }}
   NAMESPACE: ${{ secrets.NAMESPACE }}
-  APP_NAME: ${{ secrets.APP_NAME }}
-  PORT: ${{ secrets.PORT }}
+  APP_NAME: ${{ APP_NAME }}
+  PORT: ${{ PORT }}
 
 jobs:
   deploy:
