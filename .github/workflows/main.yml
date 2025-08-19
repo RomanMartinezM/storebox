@@ -1,18 +1,40 @@
-name: Debug OpenShift Deployment
+name: Deploy to OpenShift
+
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
 env:
   OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER }}
-  NAMESPACE: ${{ secrets.NAMESPACE || 'storebox' }}
+  NAMESPACE: ${{ secrets.NAMESPACE }}
   APP_NAME: storebox
+  PORT: 8080
+  SPRING_PROFILES_ACTIVE: prod
 
 jobs:
-  debug:
+  deploy:
     runs-on: ubuntu-latest
     
     steps:
     - uses: actions/checkout@v3
+    
+    - name: Debug - List files
+      run: ls -la
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Build with Maven
+      run: |
+        mvn -B clean package -DskipTests
+        ls -la target/
+      
+    - name: Show Dockerfile
+      run: cat Dockerfile
       
     - name: Install OpenShift CLI
       uses: redhat-actions/openshift-tools-installer@v1
@@ -20,15 +42,37 @@ jobs:
         oc: '4.12.0'
         skip_cache: true
       
-    - name: Test OpenShift Connection
+    - name: Login to OpenShift
       run: |
-        echo "Testing OpenShift connection..."
-        oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ env.OPENSHIFT_SERVER }} --insecure-skip-tls-verify=true
-        echo "Logged in as:"
+        oc version
+        oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }} --insecure-skip-tls-verify=true
         oc whoami
-        echo "Available projects:"
         oc projects
-        echo "Creating/selecting namespace..."
         oc project ${{ env.NAMESPACE }} || oc new-project ${{ env.NAMESPACE }}
-        echo "Current project:"
-        oc project
+    
+    - name: Deploy Application
+      run: |
+        echo "Deploying ${{ env.APP_NAME }} to ${{ env.NAMESPACE }}"
+        
+        # Create or update the app
+        if ! oc get deployment ${{ env.APP_NAME }} &> /dev/null; then
+          echo "Creating new application..."
+          oc new-app . --name=${{ env.APP_NAME }} \
+            --strategy=docker \
+            -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILES_ACTIVE }} \
+            -e SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
+            -e SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
+            -e SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+            
+          oc expose svc/${{ env.APP_NAME }} || echo "Service already exposed"
+        else
+          echo "Updating existing application..."
+          oc start-build ${{ env.APP_NAME }} --from-dir=. --follow
+        fi
+        
+        # Get deployment status
+        oc get pods
+        oc logs -f deployment/${{ env.APP_NAME }} --tail=50 || echo "Could not get logs"
+        
+        # Show route
+        oc get route ${{ env.APP_NAME }} || echo "Could not get route"
