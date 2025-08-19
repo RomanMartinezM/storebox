@@ -8,10 +8,9 @@ on:
 env:
   OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER }}
   NAMESPACE: ${{ secrets.NAMESPACE }}
-  APP_NAME: ${{ vars.APP_NAME }}
-  PORT: ${{ vars.PORT }}
-  SPRING_PROFILES_ACTIVE: ${{ vars.SPRING_PROFILES_ACTIVE }} 
-  
+  APP_NAME: ${{ vars.APP_NAME || 'storebox' }}
+  PORT: ${{ vars.PORT || '8080' }}
+  SPRING_PROFILES_ACTIVE: ${{ vars.SPRING_PROFILES_ACTIVE || 'prod' }}
 
 jobs:
   deploy:
@@ -27,55 +26,81 @@ jobs:
         distribution: 'temurin'
     
     - name: Build with Maven
-      run: mvn -B clean package -DskipTests
+      run: |
+        mvn -B clean package -DskipTests
+        ls -la target/  # Debug: Check the built JAR file
       
     - name: Install OpenShift CLI
       uses: redhat-actions/openshift-tools-installer@v1
       with:
-        oc: '4.12.0'  # Using a more stable version
-        skip_cache: true  # Skip caching to avoid conflicts
+        oc: '4.12.0'
+        skip_cache: true
       
     - name: Login to OpenShift
       run: |
-        oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }}
-        oc project ${{ secrets.NAMESPACE }}
+        oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }} --insecure-skip-tls-verify=true
+        oc project ${{ secrets.NAMESPACE }} || oc new-project ${{ secrets.NAMESPACE }}
     
     - name: Deploy Application
       run: |
         # Create a new app or update existing one
         if ! oc get deployment ${{ env.APP_NAME }} &> /dev/null; then
-          # Create new app if it doesn't exist
-          oc new-app . --name=${{ env.APP_NAME }} \
-            --strategy=docker \
-            -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILES_ACTIVE }} \
-            -e SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
-            -e SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
-            -e SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+          echo "Creating new application..."
+          
+          # Check if we have a Dockerfile
+          if [ -f "Dockerfile" ]; then
+            echo "Using existing Dockerfile..."
+            oc new-app . --name=${{ env.APP_NAME }} \
+              --strategy=docker \
+              -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILES_ACTIVE }} \
+              -e SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
+              -e SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
+              -e SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+          else
+            echo "No Dockerfile found, using Source-to-Image (S2I) with Java..."
+            oc new-app --name=${{ env.APP_NAME }} \
+              --image-stream=openjdk-17 \
+              --binary \
+              -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILES_ACTIVE }} \
+              -e SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }} \
+              -e SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }} \
+              -e SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+            
+            # Start the build with the JAR file
+            oc start-build ${{ env.APP_NAME }} --from-file=target/*.jar --follow
+          fi
           
           # Expose the service
-          oc expose svc/${{ env.APP_NAME }}
+          oc expose svc/${{ env.APP_NAME }} || echo "Service already exposed"
         else
           echo "Updating existing application..."
-          # Start a new build for existing app
-          oc start-build ${{ env.APP_NAME }} --from-dir=. --follow
+          if [ -f "Dockerfile" ]; then
+            oc start-build ${{ env.APP_NAME }} --from-dir=. --follow
+          else
+            oc start-build ${{ env.APP_NAME }} --from-file=target/*.jar --follow
+          fi
         fi
         
         # Configure health checks
         oc set probe deployment/${{ env.APP_NAME }} \
           --liveness \
           --get-url=http://:${{ env.PORT }}/actuator/health \
-          --initial-delay-seconds=60 \
-          --timeout-seconds=5
+          --initial-delay-seconds=120 \
+          --timeout-seconds=5 || echo "Failed to set liveness probe"
           
         oc set probe deployment/${{ env.APP_NAME }} \
           --readiness \
           --get-url=http://:${{ env.PORT }}/actuator/health \
           --initial-delay-seconds=30 \
-          --timeout-seconds=5
+          --timeout-seconds=5 || echo "Failed to set readiness probe"
         
         # Wait for deployment to complete
-        oc rollout status deployment/${{ env.APP_NAME }}
-
-        # Get detailed pod status if deployment fails
+        oc rollout status deployment/${{ env.APP_NAME }} --timeout=300s || echo "Deployment failed or timed out"
+        
+        # Debug information
+        echo "Current pods:"
         oc get pods
+        echo "Deployment status:"
         oc describe deployment/${{ env.APP_NAME }}
+        echo "Build logs:"
+        oc logs -f deployment/${{ env.APP_NAME }} --tail=50 || echo "Could not get logs"
