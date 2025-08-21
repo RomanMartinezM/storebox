@@ -1,16 +1,13 @@
 spring:
-  #autoconfigure:
-  #  exclude: org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
   config:
     import: "optional:file:./.env"
   application:
     name: store
-  jwt:
-    secret: ${JWT_SECRET}
-    accessTokenExpiration: 900 # 15m
-    refreshTokenExpiration: 604800 # 7d
+  #jwt:
+  #  secret: ${JWT_SECRET}
+  #  accessTokenExpiration: 900 # 15m
+  #  refreshTokenExpiration: 604800 # 7d
   profiles:
     active: ${SPRING_PROFILES_ACTIVE}
-stripe:
-  secretKey: ${STRIPE_SECRET_KEY}
-  webhookSecretKey: ${STRIPE_WEBHOOK_SECRET_KEY}
