@@ -23,8 +23,8 @@ ENV TZ=America/Mexico_City \
 EXPOSE ${SERVER_PORT}
 
 # Create a non-root user and switch to it
-RUN groupadd -r -g 1001 appuser && \
-    useradd -r -u 1001 -g appuser -s /bin/false appuser && \
+RUN addgroup -S -g 1001 appuser && \
+    adduser -S -u 1001 -G appuser -s /bin/false -D appuser && \
     chown -R appuser:appuser /app
 
 USER appuser
