@@ -13,7 +13,7 @@ public class RegisterUserRequest {
 
     @NotBlank(message = "Email is required")
     @Email(message = "Email must be valid")
-    //@Lowercase(message = "Email must be in lowercase")
+    @Lowercase(message = "Email must be in lowercase")
     private String email;
 
     @NotBlank(message = "Password is required")

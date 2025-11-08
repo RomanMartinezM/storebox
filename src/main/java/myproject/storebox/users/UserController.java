@@ -47,6 +47,13 @@ public class UserController {
         userService.deleteUser(id);
     }
 
+    @PostMapping("/{id}/change-password")
+    public void changePassword(
+            @PathVariable Long id,
+            @RequestBody ChangePasswordRequest request) {
+        userService.changePassword(id, request);
+    }
+
     @ExceptionHandler(DuplicateUserException.class)
     public ResponseEntity<Map<String, String>> handleDuplicateUser() {
         return ResponseEntity.badRequest().body(
