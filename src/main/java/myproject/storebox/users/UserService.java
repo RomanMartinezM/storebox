@@ -34,7 +34,7 @@ public class UserService {
 
         var user = userMapper.toEntity(request);
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-        user.setRole(Role.USER);
+        //user.setRole(Role.USER);
         userRepository.save(user);
 
         return userMapper.toDto(user);

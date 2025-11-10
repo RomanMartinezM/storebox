@@ -1,37 +1,44 @@
 # Build stage
-FROM maven:3.8.7 AS build
+FROM maven:3.8.7-eclipse-temurin-17 AS build
 WORKDIR /app
+
+# Copy just the POM file first to leverage Docker cache
 COPY pom.xml .
-# Download dependencies first to leverage Docker cache
-RUN mvn dependency:go-offline
-COPY src ./src
-RUN mvn clean package -DskipTests
 
-# Run stage
-FROM eclipse-temurin:17-jdk-alpine
+# Download dependencies with retry mechanism
+RUN mvn -B dependency:go-offline || \
+    (echo "First attempt failed, retrying..." && \
+     mvn -B dependency:go-offline) || \
+    (echo "Second attempt failed, retrying one more time..." && \
+     mvn -B dependency:go-offline) || \
+    (echo "Final attempt with clean..." && \
+     mvn -B dependency:purge-local-repository && \
+     mvn -B dependency:go-offline)
+
+# Copy source code
+COPY src ./src
+
+# Build the application
+RUN mvn -B clean package -DskipTests
+
+# Final stage
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 
-# Copy the built JAR
+# Copy the JAR from the build stage
 COPY --from=build /app/target/*.jar app.jar
 
-# Set environment variables with defaults
-ENV TZ=America/Mexico_City \
-    SPRING_PROFILES_ACTIVE=prod \
-    SERVER_PORT=8080
-
-# Expose the port the app runs on
-EXPOSE ${SERVER_PORT}
-
-# Create a non-root user and switch to it
-RUN addgroup -S -g 1001 appuser && \
-    adduser -S -u 1001 -G appuser -s /bin/false -D appuser && \
+# Create a non-root user and set permissions
+RUN groupadd -r appuser && \
+    useradd -r -g appuser -d /app -s /sbin/nologin appuser && \
     chown -R appuser:appuser /app
 
+# Switch to non-root user
 USER appuser
 
-# Health check
+# Health check (using wget which is more commonly available)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:${SERVER_PORT}/actuator/health || exit 1
+  CMD wget --quiet --tries=1 --spider http://localhost:8080/actuator/health || exit 1
 
 # Command to run the application
 ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "app.jar"]
