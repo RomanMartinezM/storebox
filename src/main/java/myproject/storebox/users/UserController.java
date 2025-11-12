@@ -66,4 +66,9 @@ public class UserController {
         return ResponseEntity.notFound().build();
     }
 
+    /*@ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Void> handleAccessDenied() {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
+     */
 }
