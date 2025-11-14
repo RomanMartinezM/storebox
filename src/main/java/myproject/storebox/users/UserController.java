@@ -17,6 +17,7 @@ public class UserController {
 
     @GetMapping
     public Iterable<UserDto> getAllUsers() {
+        System.out.println("GET /users endpoint called - Retrieving all users");
         return userService.getAllUsers();
     }
 
