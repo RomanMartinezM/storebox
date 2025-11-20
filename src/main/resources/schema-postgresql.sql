@@ -15,3 +15,5 @@ CREATE TABLE users
     password VARCHAR(255) NOT NULL,
     CONSTRAINT uk_users_email UNIQUE (email)
 );
+
+
