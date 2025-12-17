@@ -27,6 +27,9 @@
 		<url/>
 	</scm>
 	<properties>
+		<sonar.organization>${env.SONARCLOUD_ORGANIZATION}</sonar.organization>
+		<sonar.projectKey>${env.SONARCLOUD_PROJECT_KEY}</sonar.projectKey>
+		<jacoco.version>0.8.14</jacoco.version>
 		<java.version>17</java.version>
 		<org.mapstruct.version>1.5.5.Final</org.mapstruct.version>
 		<flyway.version>10.11.1</flyway.version>
@@ -147,6 +150,25 @@
 						</exclude>
 					</excludes>
 				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.14</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>test</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+				</executions>
 			</plugin>
 		</plugins>
 	</build>
