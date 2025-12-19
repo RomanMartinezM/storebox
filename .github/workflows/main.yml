@@ -42,6 +42,7 @@ jobs:
             -Dsonar.java.binaries=target/classes
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
+
   deploy:
     needs: sonarcloud
     runs-on: ubuntu-latest
